@@ -32,7 +32,9 @@ Daarna kies je de versie:
 - Valt iemand weg, dan gaat het spel gewoon door. Wie de app weer opent, komt terug met dezelfde kaarten en punten.
 - Sluit de maker per ongeluk de app, dan kan die het spel vanaf het startscherm hervatten. De anderen verbinden dan vanzelf opnieuw.
 
-Technisch: de telefoons praten rechtstreeks met elkaar via WebRTC, met de gratis openbare dienst van [PeerJS](https://peerjs.com) om elkaar te vinden. Je hebt dus geen eigen server of account nodig. Op wifi werkt dat vrijwel altijd. Op sommige mobiele (4G/5G) netwerken lukt een rechtstreekse verbinding soms niet. Zet dan wifi aan of probeer een andere telefoon als maker.
+Technisch: de telefoons praten rechtstreeks met elkaar via WebRTC, met de gratis openbare dienst van [PeerJS](https://peerjs.com) om elkaar te vinden. Lukt een rechtstreekse verbinding niet, wat op mobiele data (4G/5G) vaak gebeurt, dan loopt het verkeer via een tussenstation (TURN-server) van [Metered](https://www.metered.ca), app `schaamteloos`. Het spel stuurt alleen wat tekst rond, dus het gratis tegoed van 20 GB per maand is ruim voldoende.
+
+Krijgt iemand toch de melding dat het netwerk de verbinding blokkeert, laat die speler dan via wifi of iemands hotspot meedoen. Kijk ook in het Metered-dashboard of het tegoed niet op is.
 
 ## Op je telefoon zetten
 

@@ -15,6 +15,10 @@ const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ";
 const PEERJS_URL = "https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";
 const QR_URL = "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js";
 const PARAMS = new URLSearchParams(location.search);
+// Tussenstation (TURN) voor netwerken waar telefoons niet rechtstreeks kunnen verbinden,
+// zoals veel mobiele data. Deze sleutel mag in de app staan: hij geeft alleen toegang tot het tussenstation.
+const TURN_URL = "https://schaamteloos.metered.live/api/v1/turn/credentials?apiKey=5f3e642195814b83106fd6263b45e30b740e";
+const KEY_ICE = "schaamteloos.ice.v1";
 const NO_NET = !!window.SCHAAM_NO_NET;
 
 /* ---------- Helpers ---------- */
@@ -464,9 +468,33 @@ function buzz() { try { navigator.vibrate && navigator.vibrate([30, 40, 60]); } 
 
 /* ---------- Verbinding ---------- */
 // Elke verbinding: { send(obj), onData(fn), onClose(fn), close() }
+let icePromise = null;
+function iceServers() {
+  // Haal de TURN-gegevens op (max. 5 s). Lukt dat niet, dan de laatst bekende of alleen STUN.
+  if (icePromise) return icePromise;
+  const stun = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.relay.metered.ca:80" }];
+  icePromise = (async () => {
+    if (PARAMS.get("noturn")) return stun;
+    try {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 5000);
+      const r = await fetch(TURN_URL, { signal: ctl.signal, cache: "no-store" });
+      clearTimeout(t);
+      if (!r.ok) throw new Error("turn " + r.status);
+      const list = await r.json();
+      if (!Array.isArray(list) || !list.length) throw new Error("turn leeg");
+      store.set(KEY_ICE, { at: Date.now(), list });
+      return list;
+    } catch (e) {
+      icePromise = null; // volgende keer opnieuw proberen
+      const old = store.get(KEY_ICE);
+      return old && Array.isArray(old.list) ? old.list : stun;
+    }
+  })();
+  return icePromise;
+}
 const PeerNet = {
-  opts() {
-    const o = { debug: 0 };
+  async opts() {
+    const o = { debug: 0, config: { iceServers: await iceServers() } };
     if (PARAMS.get("peerhost")) Object.assign(o, { host: PARAMS.get("peerhost"), port: +PARAMS.get("peerport") || 9000, path: PARAMS.get("peerpath") || "/", secure: false });
     return o;
   },
@@ -478,9 +506,9 @@ const PeerNet = {
     return { send(d) { try { if (c.open) c.send(d); } catch (e) {} }, onData(f) { onD = f; }, onClose(f) { onC = f; }, close() { try { c.close(); } catch (e) {} fire(); } };
   },
   async host(code, onConn) {
-    await loadScript(PEERJS_URL);
+    const [, opts] = await Promise.all([loadScript(PEERJS_URL), this.opts()]);
     return new Promise((res, rej) => {
-      const peer = new Peer(PEER_PREFIX + code, this.opts());
+      const peer = new Peer(PEER_PREFIX + code, opts);
       let opened = false;
       const t = setTimeout(() => { if (!opened) { peer.destroy(); rej(new Error("network")); } }, 15000);
       peer.on("open", () => { opened = true; clearTimeout(t); res({ close() { peer.destroy(); } }); });
@@ -490,13 +518,15 @@ const PeerNet = {
     });
   },
   async join(code) {
-    await loadScript(PEERJS_URL);
+    const [, opts] = await Promise.all([loadScript(PEERJS_URL), this.opts()]);
     return new Promise((res, rej) => {
-      const peer = new Peer(this.opts());
-      let done = false;
+      const peer = new Peer(opts);
+      let done = false, signalled = false;
       const fail = m => { if (done) return; done = true; peer.destroy(); rej(new Error(m)); };
-      const t = setTimeout(() => fail("timeout"), 15000);
+      // Server wel bereikt maar geen verbinding met de maker: dan ligt het aan het netwerk.
+      const t = setTimeout(() => fail(signalled ? "blocked" : "timeout"), 20000);
       peer.on("open", () => {
+        signalled = true;
         const c = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: "json" });
         c.on("open", () => {
           if (done) return; done = true; clearTimeout(t);
@@ -745,7 +775,10 @@ async function clientConnect(first) {
     if (NET.role !== "client" || NET.left) return;
     if (first && !NET.view) {
       store.del(KEY_CLIENT);
-      return netError(e.message === "notfound" ? `Geen spel gevonden met code ${NET.code}. Klopt de code, en staat de app van de maker nog open?` : "Geen verbinding met de spelserver. Controleer je internet en probeer opnieuw.");
+      return netError(
+        e.message === "notfound" ? `Geen spel gevonden met code ${NET.code}. Klopt de code, en staat de app van de maker nog open?`
+        : e.message === "blocked" ? "Het spel is gevonden, maar je netwerk blokkeert de verbinding met de maker. Probeer het via wifi of de hotspot van iemand anders."
+        : "Geen verbinding met de spelserver. Controleer je internet en probeer opnieuw.");
     }
     clientLost();
   }

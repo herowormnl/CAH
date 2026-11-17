@@ -1,5 +1,5 @@
 // Offline-cache: na het eerste bezoek werkt de app ook zonder internet.
-const CACHE = "schaamteloos-v2";
+const CACHE = "schaamteloos-v3";
 const ASSETS = ["./", "index.html", "style.css", "cards.js", "app.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -14,7 +14,7 @@ self.addEventListener("activate", e => {
 
 // Netwerk eerst (zodat updates binnenkomen), cache als terugval.
 self.addEventListener("fetch", e => {
-  if (e.request.method !== "GET") return;
+  if (e.request.method !== "GET" || new URL(e.request.url).origin !== location.origin) return; // alleen eigen bestanden
   e.respondWith(
     fetch(e.request)
       .then(r => {

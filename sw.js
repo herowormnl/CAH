@@ -1,6 +1,6 @@
 // Offline-cache: na het eerste bezoek werkt de app ook zonder internet.
-const CACHE = "schaamteloos-v1";
-const ASSETS = ["./", "index.html", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
+const CACHE = "schaamteloos-v2";
+const ASSETS = ["./", "index.html", "style.css", "cards.js", "app.js", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
